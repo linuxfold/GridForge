@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Main gradient: deep blue to teal -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a5cff;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#0d3fd4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a2ea0;stop-opacity:1" />
+    </linearGradient>
+    <!-- Inner shadow gradient -->
+    <linearGradient id="innerGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.25" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0" />
+    </linearGradient>
+    <!-- Accent gradient for the active cell -->
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4df0c0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#22d4a8;stop-opacity:1" />
+    </linearGradient>
+    <!-- Grid cell subtle fill -->
+    <linearGradient id="cellFill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.18" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0.06" />
+    </linearGradient>
+    <!-- Drop shadow -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="20" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <filter id="glowFilter">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square (macOS icon shape) -->
+  <rect x="40" y="40" width="944" height="944" rx="212" ry="212" fill="url(#bgGrad)" filter="url(#dropShadow)"/>
+
+  <!-- Inner glow overlay -->
+  <rect x="40" y="40" width="944" height="944" rx="212" ry="212" fill="url(#innerGlow)"/>
+
+  <!-- Subtle border -->
+  <rect x="40" y="40" width="944" height="944" rx="212" ry="212" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+
+  <!-- Grid structure -->
+  <!-- Column headers area -->
+  <rect x="180" y="230" width="664" height="50" rx="6" ry="6" fill="rgba(255,255,255,0.12)"/>
+
+  <!-- Row headers area -->
+  <rect x="180" y="230" width="80" height="504" rx="6" ry="6" fill="rgba(255,255,255,0.12)"/>
+
+  <!-- Grid cells background -->
+  <rect x="264" y="284" width="580" height="450" rx="4" ry="4" fill="url(#cellFill)"/>
+
+  <!-- Horizontal grid lines -->
+  <line x1="264" y1="284" x2="844" y2="284" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+  <line x1="264" y1="374" x2="844" y2="374" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <line x1="264" y1="464" x2="844" y2="464" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <line x1="264" y1="554" x2="844" y2="554" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <line x1="264" y1="644" x2="844" y2="644" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <line x1="264" y1="734" x2="844" y2="734" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+
+  <!-- Vertical grid lines -->
+  <line x1="264" y1="284" x2="264" y2="734" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+  <line x1="408" y1="284" x2="408" y2="734" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <line x1="554" y1="284" x2="554" y2="734" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <line x1="700" y1="284" x2="700" y2="734" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <line x1="844" y1="284" x2="844" y2="734" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+
+  <!-- Column headers: A B C D -->
+  <text x="336" y="264" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="30" font-weight="600" fill="rgba(255,255,255,0.7)" text-anchor="middle">A</text>
+  <text x="481" y="264" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="30" font-weight="600" fill="rgba(255,255,255,0.7)" text-anchor="middle">B</text>
+  <text x="627" y="264" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="30" font-weight="600" fill="rgba(255,255,255,0.7)" text-anchor="middle">C</text>
+  <text x="772" y="264" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="30" font-weight="600" fill="rgba(255,255,255,0.7)" text-anchor="middle">D</text>
+
+  <!-- Row headers: 1 2 3 4 5 -->
+  <text x="222" y="340" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="28" font-weight="500" fill="rgba(255,255,255,0.6)" text-anchor="middle">1</text>
+  <text x="222" y="430" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="28" font-weight="500" fill="rgba(255,255,255,0.6)" text-anchor="middle">2</text>
+  <text x="222" y="520" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="28" font-weight="500" fill="rgba(255,255,255,0.6)" text-anchor="middle">3</text>
+  <text x="222" y="610" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="28" font-weight="500" fill="rgba(255,255,255,0.6)" text-anchor="middle">4</text>
+  <text x="222" y="700" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="28" font-weight="500" fill="rgba(255,255,255,0.6)" text-anchor="middle">5</text>
+
+  <!-- Active cell highlight (B2) - the hero element -->
+  <rect x="410" y="376" width="142" height="86" rx="4" ry="4" fill="url(#accentGrad)" opacity="0.25"/>
+  <rect x="410" y="376" width="142" height="86" rx="4" ry="4" fill="none" stroke="url(#accentGrad)" stroke-width="3" filter="url(#glowFilter)"/>
+
+  <!-- Sample data in cells -->
+  <!-- Row 1 -->
+  <text x="280" y="340" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="26" font-weight="500" fill="rgba(255,255,255,0.85)">Name</text>
+  <text x="424" y="340" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="26" font-weight="500" fill="rgba(255,255,255,0.85)">Value</text>
+  <text x="570" y="340" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="26" font-weight="500" fill="rgba(255,255,255,0.85)">Status</text>
+
+  <!-- Row 2 -->
+  <text x="280" y="430" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="25" fill="rgba(255,255,255,0.7)">Alpha</text>
+  <text x="424" y="430" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="25" fill="rgba(255,255,255,0.95)" font-weight="600">1,240</text>
+
+  <!-- Row 3 -->
+  <text x="280" y="520" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="25" fill="rgba(255,255,255,0.7)">Beta</text>
+  <text x="424" y="520" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="25" fill="rgba(255,255,255,0.7)">890</text>
+
+  <!-- Row 4 - formula indicator -->
+  <text x="280" y="610" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="25" fill="rgba(255,255,255,0.7)">Total</text>
+  <text x="424" y="610" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="25" fill="#4df0c0" font-weight="600">2,130</text>
+  <text x="716" y="610" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="20" fill="rgba(255,255,255,0.4)" font-style="italic">=SUM</text>
+
+  <!-- Small accent bar at the top for visual flair -->
+  <rect x="340" y="170" width="344" height="6" rx="3" ry="3" fill="url(#accentGrad)" opacity="0.6"/>
+
+  <!-- Bottom branding area — "GF" monogram -->
+  <text x="512" y="840" font-family="-apple-system, SF Pro Display, Helvetica Neue" font-size="60" font-weight="700" fill="rgba(255,255,255,0.15)" text-anchor="middle" letter-spacing="12">GRIDFORGE</text>
+</svg>
