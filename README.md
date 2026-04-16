@@ -48,6 +48,40 @@
 
 ---
 
+## Screenshots
+
+### Spreadsheet with XLSX Data
+<p align="center">
+  <img src="Assets/screenshots/01-main-spreadsheet.png" width="800" alt="GridForge — Main Spreadsheet View" />
+</p>
+<p align="center"><em>Product data imported from .xlsx — formulas, multi-sheet tabs, toolbar, formula bar, status bar</em></p>
+
+### Formula Bar & Cell Selection
+<p align="center">
+  <img src="Assets/screenshots/02-formula-selected.png" width="800" alt="GridForge — Formula Selected" />
+</p>
+<p align="center"><em>Formula bar shows cell content — name box displays address, f(x) indicator, raw formula/value</em></p>
+
+### Inspector Panel
+<p align="center">
+  <img src="Assets/screenshots/03-inspector-panel.png" width="800" alt="GridForge — Inspector Panel" />
+</p>
+<p align="center"><em>Side inspector with Cell Info, Font & Text formatting, Colors, and Sheet Info sections</em></p>
+
+### Range Selection with Statistics
+<p align="center">
+  <img src="Assets/screenshots/04-range-selection.png" width="800" alt="GridForge — Range Selection" />
+</p>
+<p align="center"><em>Multi-cell selection with live statistics in the status bar (Sum, Average, Count)</em></p>
+
+### Dark Mode
+<p align="center">
+  <img src="Assets/screenshots/05-dark-mode.png" width="800" alt="GridForge — Dark Mode" />
+</p>
+<p align="center"><em>Full dark mode support — adaptive system colors throughout the entire interface</em></p>
+
+---
+
 ## What is GridForge?
 
 GridForge is a **serious, native macOS spreadsheet application** built from scratch in Swift + SwiftUI — without Xcode. It features a real formula engine with 50+ functions, genuine XLSX import/export compatible with Excel, a high-performance virtualized grid, and a premium modern UI.
