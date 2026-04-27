@@ -104,6 +104,7 @@ enum GridForgeNSFonts {
     }()
     static let headerFont = NSFont.systemFont(ofSize: 11, weight: .medium)
     static let editorFont = NSFont.systemFont(ofSize: 13)
+    static let formulaBarFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 }
 
 // MARK: - Spacing & Layout

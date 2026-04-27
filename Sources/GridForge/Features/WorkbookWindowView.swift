@@ -6,7 +6,18 @@ import UniformTypeIdentifiers
 // MARK: - WorkbookWindowView
 
 struct WorkbookWindowView: View {
-    @StateObject var viewModel = WorkbookViewModel()
+    private let document: Binding<GridForgeDocument>?
+    @StateObject var viewModel: WorkbookViewModel
+
+    init() {
+        self.document = nil
+        self._viewModel = StateObject(wrappedValue: WorkbookViewModel())
+    }
+
+    init(document: Binding<GridForgeDocument>) {
+        self.document = document
+        self._viewModel = StateObject(wrappedValue: WorkbookViewModel(workbook: document.wrappedValue.workbook))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,6 +92,11 @@ struct WorkbookWindowView: View {
         }
         .navigationTitle(viewModel.windowTitle)
         .focusedSceneValue(\.activeWorkbookViewModel, viewModel)
+        .onChange(of: viewModel.version) { _, _ in
+            if let document {
+                document.wrappedValue.workbook = viewModel.workbook
+            }
+        }
         .toolbar {
             // File group
             ToolbarItemGroup(placement: .automatic) {

@@ -6,6 +6,11 @@ public class XLSXWriter {
 
     /// Write a workbook to an XLSX file at the given URL
     public static func write(_ workbook: Workbook, to url: URL) throws {
+        if let package = workbook.sourceXLSXPackage {
+            try write(workbook, to: url, preserving: package)
+            return
+        }
+
         // Remove existing file if present
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
@@ -69,7 +74,10 @@ public class XLSXWriter {
     // MARK: - Archive Helpers
 
     private static func addEntry(to archive: Archive, path: String, content: String) throws {
-        let data = Data(content.utf8)
+        try addEntry(to: archive, path: path, data: Data(content.utf8))
+    }
+
+    private static func addEntry(to archive: Archive, path: String, data: Data) throws {
         let uncompressedSize = Int64(data.count)
         var offset = 0
         try archive.addEntry(
@@ -84,6 +92,90 @@ public class XLSXWriter {
                 return Data()
             }
             return data[start..<end]
+        }
+    }
+
+    // MARK: - Package Preservation
+
+    private static func write(_ workbook: Workbook, to url: URL, preserving package: XLSXPackage) throws {
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+
+        let archive: Archive
+        do {
+            archive = try Archive(url: url, accessMode: .create)
+        } catch {
+            throw XLSXWriterError.cannotCreateArchive(url)
+        }
+
+        let replacementEntries = replacementEntries(for: workbook, preserving: package)
+        var written = Set<String>()
+
+        for path in package.entries.keys.sorted() {
+            let data = replacementEntries[path] ?? package.entries[path] ?? Data()
+            try addEntry(to: archive, path: path, data: data)
+            written.insert(path)
+        }
+
+        for (path, data) in replacementEntries where !written.contains(path) {
+            try addEntry(to: archive, path: path, data: data)
+        }
+    }
+
+    private static func replacementEntries(for workbook: Workbook, preserving package: XLSXPackage) -> [String: Data] {
+        let (sharedStringSet, sharedStrings) = buildSharedStrings(for: workbook)
+        let sheetPaths = concreteSheetPaths(for: workbook, preserving: package)
+        var replacements: [String: Data] = [:]
+
+        replacements["[Content_Types].xml"] = Data(contentTypesXML(
+            preserving: package.entries["[Content_Types].xml"],
+            sheetPartPaths: sheetPaths,
+            hasSharedStrings: !sharedStrings.isEmpty
+        ).utf8)
+        replacements["xl/workbook.xml"] = Data(workbookXML(sheets: workbook.sheets).utf8)
+        replacements["xl/_rels/workbook.xml.rels"] = Data(workbookRelsXML(
+            sheetPartPaths: sheetPaths,
+            hasSharedStrings: !sharedStrings.isEmpty
+        ).utf8)
+
+        if package.entries["xl/styles.xml"] == nil {
+            replacements["xl/styles.xml"] = Data(minimalStylesXML().utf8)
+        }
+
+        if !sharedStrings.isEmpty {
+            replacements["xl/sharedStrings.xml"] = Data(sharedStringsXML(sharedStrings).utf8)
+        }
+
+        for (index, sheet) in workbook.sheets.enumerated() {
+            replacements[sheetPaths[index]] = Data(worksheetXML(sheet: sheet, sharedStringSet: sharedStringSet).utf8)
+        }
+
+        return replacements
+    }
+
+    private static func buildSharedStrings(for workbook: Workbook) -> ([String: Int], [String]) {
+        var sharedStringSet: [String: Int] = [:]
+        var sharedStrings: [String] = []
+        for sheet in workbook.sheets {
+            for (_, cell) in sheet.cells {
+                if case .string(let s) = cell.value, !cell.isFormula {
+                    if sharedStringSet[s] == nil {
+                        sharedStringSet[s] = sharedStrings.count
+                        sharedStrings.append(s)
+                    }
+                }
+            }
+        }
+        return (sharedStringSet, sharedStrings)
+    }
+
+    private static func concreteSheetPaths(for workbook: Workbook, preserving package: XLSXPackage) -> [String] {
+        workbook.sheets.indices.map { index in
+            if index < package.sheetPartPaths.count {
+                return package.sheetPartPaths[index]
+            }
+            return "xl/worksheets/sheet\(index + 1).xml"
         }
     }
 
@@ -110,6 +202,78 @@ public class XLSXWriter {
             xml += """
 
               <Override PartName="/xl/worksheets/sheet\(i).xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+            """
+        }
+
+        xml += "\n</Types>"
+        return xml
+    }
+
+    private static func contentTypesXML(
+        preserving originalData: Data?,
+        sheetPartPaths: [String],
+        hasSharedStrings: Bool
+    ) -> String {
+        guard let originalData,
+              var xml = String(data: originalData, encoding: .utf8),
+              xml.contains("</Types>") else {
+            return contentTypesXML(sheetPartPaths: sheetPartPaths, hasSharedStrings: hasSharedStrings)
+        }
+
+        var additions: [String] = []
+        func addOverrideIfMissing(partName: String, contentType: String) {
+            guard !xml.contains("PartName=\"\(partName)\"") else { return }
+            additions.append("  <Override PartName=\"\(partName)\" ContentType=\"\(contentType)\"/>")
+        }
+
+        addOverrideIfMissing(
+            partName: "/xl/workbook.xml",
+            contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
+        )
+        addOverrideIfMissing(
+            partName: "/xl/styles.xml",
+            contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"
+        )
+        if hasSharedStrings {
+            addOverrideIfMissing(
+                partName: "/xl/sharedStrings.xml",
+                contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"
+            )
+        }
+        for path in sheetPartPaths {
+            addOverrideIfMissing(
+                partName: "/\(path)",
+                contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"
+            )
+        }
+
+        guard !additions.isEmpty else { return xml }
+        let insertion = additions.joined(separator: "\n") + "\n"
+        xml = xml.replacingOccurrences(of: "</Types>", with: insertion + "</Types>")
+        return xml
+    }
+
+    private static func contentTypesXML(sheetPartPaths: [String], hasSharedStrings: Bool) -> String {
+        var xml = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+          <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+          <Default Extension="xml" ContentType="application/xml"/>
+          <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+          <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+        """
+
+        if hasSharedStrings {
+            xml += """
+
+              <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+            """
+        }
+
+        for path in sheetPartPaths {
+            xml += """
+
+              <Override PartName="/\(path)" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
             """
         }
 
@@ -167,6 +331,33 @@ public class XLSXWriter {
 
         if hasSharedStrings {
             let ssId = sheetCount + 2
+            xml += "\n  <Relationship Id=\"rId\(ssId)\""
+            xml += " Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\""
+            xml += " Target=\"sharedStrings.xml\"/>"
+        }
+
+        xml += "\n</Relationships>"
+        return xml
+    }
+
+    private static func workbookRelsXML(sheetPartPaths: [String], hasSharedStrings: Bool) -> String {
+        var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        xml += "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+
+        for (index, path) in sheetPartPaths.enumerated() {
+            let target = path.hasPrefix("xl/") ? String(path.dropFirst(3)) : path
+            xml += "\n  <Relationship Id=\"rId\(index + 1)\""
+            xml += " Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\""
+            xml += " Target=\"\(escapeXML(target))\"/>"
+        }
+
+        let stylesId = sheetPartPaths.count + 1
+        xml += "\n  <Relationship Id=\"rId\(stylesId)\""
+        xml += " Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\""
+        xml += " Target=\"styles.xml\"/>"
+
+        if hasSharedStrings {
+            let ssId = sheetPartPaths.count + 2
             xml += "\n  <Relationship Id=\"rId\(ssId)\""
             xml += " Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\""
             xml += " Target=\"sharedStrings.xml\"/>"

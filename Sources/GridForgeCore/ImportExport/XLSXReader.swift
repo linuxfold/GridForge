@@ -43,6 +43,7 @@ public class XLSXReader {
         } catch {
             throw XLSXError.cannotOpenArchive(url)
         }
+        let packageEntries = try captureEntries(from: archive)
 
         // 1. Parse shared strings
         let sharedStrings: [String]
@@ -63,6 +64,7 @@ public class XLSXReader {
 
         // 4. For each sheet, parse the worksheet XML
         var worksheets: [Worksheet] = []
+        var sheetPartPaths: [String] = []
         for info in sheetInfos {
             guard let rel = relationships[info.rId] else {
                 throw XLSXError.corruptedData("No relationship found for rId=\(info.rId)")
@@ -75,6 +77,7 @@ public class XLSXReader {
             } else {
                 sheetPath = "xl/" + rel
             }
+            sheetPartPaths.append(sheetPath)
 
             let sheetData = try extractEntry(from: archive, path: sheetPath)
             let cells = try SheetParser.parse(data: sheetData, sharedStrings: sharedStrings)
@@ -90,7 +93,10 @@ public class XLSXReader {
             worksheets = [Worksheet(name: "Sheet1")]
         }
 
-        let workbook = Workbook(sheets: worksheets)
+        let workbook = Workbook(
+            sheets: worksheets,
+            sourceXLSXPackage: XLSXPackage(entries: packageEntries, sheetPartPaths: sheetPartPaths)
+        )
         return workbook
     }
 
@@ -109,6 +115,14 @@ public class XLSXReader {
             throw XLSXError.missingEntry(path)
         }
         return try extractData(from: archive, entry: entry)
+    }
+
+    private static func captureEntries(from archive: Archive) throws -> [String: Data] {
+        var entries: [String: Data] = [:]
+        for entry in archive {
+            entries[entry.path] = try extractData(from: archive, entry: entry)
+        }
+        return entries
     }
 }
 

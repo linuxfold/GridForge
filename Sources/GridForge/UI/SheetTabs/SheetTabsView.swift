@@ -143,19 +143,11 @@ struct SheetTabsView: View {
 
     private func moveSheetLeft(at index: Int) {
         guard index > 0 else { return }
-        viewModel.workbook.moveSheet(from: index, to: index - 1)
-        if viewModel.workbook.activeSheetIndex == index {
-            viewModel.workbook.activeSheetIndex = index - 1
-        }
-        viewModel.version += 1
+        viewModel.moveSheet(from: index, to: index - 1)
     }
 
     private func moveSheetRight(at index: Int) {
         guard index < viewModel.workbook.sheets.count - 1 else { return }
-        viewModel.workbook.moveSheet(from: index, to: index + 2)
-        if viewModel.workbook.activeSheetIndex == index {
-            viewModel.workbook.activeSheetIndex = index + 1
-        }
-        viewModel.version += 1
+        viewModel.moveSheet(from: index, to: index + 1)
     }
 }

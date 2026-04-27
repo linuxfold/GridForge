@@ -46,6 +46,19 @@ final class ModelTests: XCTestCase {
         }
     }
 
+    func testCellReferenceParsePreservesAbsoluteMarkers() {
+        let ref = CellReference.parse("$B$12")
+        XCTAssertEqual(ref?.address, CellAddress(column: 1, row: 11))
+        XCTAssertEqual(ref?.columnAbsolute, true)
+        XCTAssertEqual(ref?.rowAbsolute, true)
+        XCTAssertEqual(ref?.displayString, "$B$12")
+
+        let mixed = CellReference.parse("C$3")
+        XCTAssertEqual(mixed?.address, CellAddress(column: 2, row: 2))
+        XCTAssertEqual(mixed?.columnAbsolute, false)
+        XCTAssertEqual(mixed?.rowAbsolute, true)
+    }
+
     // MARK: - CellRange
 
     func testCellRangeNormalization() {

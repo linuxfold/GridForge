@@ -282,21 +282,24 @@ public final class FormulaEngine {
 
     /// Extract all cell addresses referenced in an AST.
     public func extractReferences(from ast: ASTNode) -> Set<CellAddress> {
-        var refs = Set<CellAddress>()
+        Set(extractCellReferences(from: ast).map(\.address))
+    }
+
+    /// Extract formula references without discarding absolute flags or sheet identity.
+    public func extractCellReferences(from ast: ASTNode) -> Set<CellReference> {
+        var refs = Set<CellReference>()
         collectReferences(from: ast, into: &refs)
         return refs
     }
 
-    private func collectReferences(from node: ASTNode, into refs: inout Set<CellAddress>) {
+    private func collectReferences(from node: ASTNode, into refs: inout Set<CellReference>) {
         switch node {
-        case .cellReference(let addr):
-            refs.insert(addr)
+        case .cellReference(let reference):
+            refs.insert(reference)
 
         case .range(let start, let end):
-            let range = CellRange(start: start, end: end)
-            for addr in range.allAddresses {
-                refs.insert(addr)
-            }
+            let range = CellRangeReference(start: start, end: end)
+            refs.formUnion(range.allReferences)
 
         case .binaryOp(_, let left, let right):
             collectReferences(from: left, into: &refs)

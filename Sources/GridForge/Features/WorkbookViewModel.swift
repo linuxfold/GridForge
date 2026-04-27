@@ -20,6 +20,7 @@ final class WorkbookViewModel: ObservableObject {
     @Published var selection: SelectionState
     @Published var isEditing: Bool = false
     @Published var editingText: String = ""
+    @Published var formulaBarHasFocus: Bool = false
     @Published var showInspector: Bool = false
     @Published var showFormulaBar: Bool = true
     @Published var showSheetTabs: Bool = true
@@ -126,10 +127,10 @@ final class WorkbookViewModel: ObservableObject {
 
     // MARK: Init
 
-    init() {
-        let wb = Workbook()
-        self.workbook = wb
+    init(workbook: Workbook = Workbook()) {
+        self.workbook = workbook
         self.selection = SelectionState()
+        self.undoManager.markClean()
         syncEditingTextFromActiveCell()
     }
 
@@ -159,6 +160,8 @@ final class WorkbookViewModel: ObservableObject {
     func commitEdit() {
         guard isEditing else { return }
         isEditing = false
+        formulaBarHasFocus = false
+        editingText = autoCompleteFormulaIfPossible(editingText)
 
         let address = activeCell
         let sheet = activeSheet
@@ -173,18 +176,18 @@ final class WorkbookViewModel: ObservableObject {
             oldRawInput: oldRawInput,
             oldValue: oldValue
         )
-        undoManager.perform(command, on: workbook)
+        perform(command)
 
         // Recalculate formulas
         formulaEngine.recalculateAffected(changedCell: address, in: sheet)
 
         syncEditingTextFromActiveCell()
-        markDirty()
         bump()
     }
 
     func cancelEdit() {
         isEditing = false
+        formulaBarHasFocus = false
         syncEditingTextFromActiveCell()
     }
 
@@ -213,7 +216,7 @@ final class WorkbookViewModel: ObservableObject {
             sheetIndex: workbook.activeSheetIndex,
             range: selectedRange
         )
-        undoManager.perform(command, on: workbook)
+        perform(command)
 
         // Recalculate formulas for all cleared addresses
         for addr in selectedRange.allAddresses {
@@ -221,7 +224,6 @@ final class WorkbookViewModel: ObservableObject {
         }
 
         syncEditingTextFromActiveCell()
-        markDirty()
         bump()
     }
 
@@ -238,42 +240,27 @@ final class WorkbookViewModel: ObservableObject {
             oldRawInput: oldRawInput,
             oldValue: oldValue
         )
-        undoManager.perform(command, on: workbook)
+        perform(command)
         formulaEngine.recalculateAffected(changedCell: address, in: sheet)
-        markDirty()
         bump()
     }
 
     // MARK: - Batch Operations
 
-    func batchSetCellRawInputs(_ changes: [(CellAddress, String)]) {
+    func batchSetCellRawInputs(_ changes: [(CellAddress, String)], label: String? = nil) {
         guard !changes.isEmpty else { return }
 
         let sheet = activeSheet
-        var commands: [SpreadsheetCommand] = []
-
-        for (address, rawInput) in changes {
-            let oldCell = sheet.cell(at: address)
-            let oldRawInput = oldCell?.rawInput ?? ""
-            let oldValue = oldCell?.value ?? .empty
-
-            let cmd = SetCellValueCommand(
-                sheetIndex: workbook.activeSheetIndex,
-                address: address,
-                newRawInput: rawInput,
-                oldRawInput: oldRawInput,
-                oldValue: oldValue
-            )
-            commands.append(cmd)
-        }
-
-        let compound = CompoundCommand(commands: commands, label: "Batch Edit (\(changes.count) cells)")
-        undoManager.perform(compound, on: workbook)
+        let command = SetCellValuesCommand(
+            sheetIndex: workbook.activeSheetIndex,
+            changes: changes,
+            label: label ?? "Batch Edit (\(changes.count) cells)"
+        )
+        perform(command)
 
         // Single recalculation pass
         formulaEngine.recalculate(worksheet: sheet)
 
-        markDirty()
         bump()
     }
 
@@ -329,7 +316,7 @@ final class WorkbookViewModel: ObservableObject {
             }
         }
 
-        batchSetCellRawInputs(changes)
+        batchSetCellRawInputs(changes, label: "Paste (\(changes.count) cells)")
     }
 
     // MARK: - Undo/Redo
@@ -339,7 +326,7 @@ final class WorkbookViewModel: ObservableObject {
         if undoManager.undo(on: workbook) {
             formulaEngine.recalculate(worksheet: activeSheet)
             syncEditingTextFromActiveCell()
-            markDirty()
+            syncDirtyState()
             bump()
         }
     }
@@ -349,7 +336,7 @@ final class WorkbookViewModel: ObservableObject {
         if undoManager.redo(on: workbook) {
             formulaEngine.recalculate(worksheet: activeSheet)
             syncEditingTextFromActiveCell()
-            markDirty()
+            syncDirtyState()
             bump()
         }
     }
@@ -357,18 +344,16 @@ final class WorkbookViewModel: ObservableObject {
     // MARK: - Sheet management
 
     func addSheet() {
-        workbook.addSheet()
-        markDirty()
+        perform(AddSheetCommand())
         bump()
     }
 
     func deleteSheet(at index: Int) {
         guard workbook.sheets.count > 1 else { return }
-        workbook.deleteSheet(at: index)
+        perform(DeleteSheetCommand(sheetIndex: index))
         selection = SelectionState()
         syncEditingTextFromActiveCell()
         formulaEngine.recalculate(worksheet: activeSheet)
-        markDirty()
         bump()
     }
 
@@ -382,14 +367,26 @@ final class WorkbookViewModel: ObservableObject {
     }
 
     func renameSheet(at index: Int, to name: String) {
-        workbook.renameSheet(at: index, to: name)
-        markDirty()
+        guard index >= 0, index < workbook.sheets.count else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != workbook.sheets[index].name else { return }
+        perform(RenameSheetCommand(sheetIndex: index, oldName: workbook.sheets[index].name, newName: trimmed))
         bump()
     }
 
     func duplicateSheet(at index: Int) {
-        workbook.duplicateSheet(at: index)
-        markDirty()
+        guard index >= 0, index < workbook.sheets.count else { return }
+        perform(DuplicateSheetCommand(sourceIndex: index))
+        bump()
+    }
+
+    func moveSheet(from sourceIndex: Int, to destinationIndex: Int) {
+        guard sourceIndex >= 0,
+              sourceIndex < workbook.sheets.count,
+              destinationIndex >= 0,
+              destinationIndex < workbook.sheets.count,
+              sourceIndex != destinationIndex else { return }
+        perform(MoveSheetCommand(fromIndex: sourceIndex, toIndex: destinationIndex))
         bump()
     }
 
@@ -401,9 +398,8 @@ final class WorkbookViewModel: ObservableObject {
             sheetIndex: workbook.activeSheetIndex,
             rowIndex: activeCell.row
         )
-        undoManager.perform(command, on: workbook)
+        perform(command)
         formulaEngine.recalculate(worksheet: activeSheet)
-        markDirty()
         bump()
     }
 
@@ -413,9 +409,8 @@ final class WorkbookViewModel: ObservableObject {
             sheetIndex: workbook.activeSheetIndex,
             columnIndex: activeCell.column
         )
-        undoManager.perform(command, on: workbook)
+        perform(command)
         formulaEngine.recalculate(worksheet: activeSheet)
-        markDirty()
         bump()
     }
 
@@ -425,9 +420,8 @@ final class WorkbookViewModel: ObservableObject {
             sheetIndex: workbook.activeSheetIndex,
             rowIndex: activeCell.row
         )
-        undoManager.perform(command, on: workbook)
+        perform(command)
         formulaEngine.recalculate(worksheet: activeSheet)
-        markDirty()
         bump()
     }
 
@@ -437,75 +431,45 @@ final class WorkbookViewModel: ObservableObject {
             sheetIndex: workbook.activeSheetIndex,
             columnIndex: activeCell.column
         )
-        undoManager.perform(command, on: workbook)
+        perform(command)
         formulaEngine.recalculate(worksheet: activeSheet)
-        markDirty()
         bump()
     }
 
     // MARK: - Formatting
 
     func toggleBold() {
-        let cell = activeSheet.cell(at: activeCell) ?? {
-            let c = Cell()
-            activeSheet.cells[activeCell] = c
-            return c
-        }()
-        cell.formatting.bold.toggle()
-        markDirty()
-        bump()
+        updateFormatting(label: "Toggle Bold") { $0.bold.toggle() }
     }
 
     func toggleItalic() {
-        let cell = activeSheet.cell(at: activeCell) ?? {
-            let c = Cell()
-            activeSheet.cells[activeCell] = c
-            return c
-        }()
-        cell.formatting.italic.toggle()
-        markDirty()
-        bump()
+        updateFormatting(label: "Toggle Italic") { $0.italic.toggle() }
     }
 
     func toggleUnderline() {
-        let cell = activeSheet.cell(at: activeCell) ?? {
-            let c = Cell()
-            activeSheet.cells[activeCell] = c
-            return c
-        }()
-        cell.formatting.underline.toggle()
-        markDirty()
-        bump()
+        updateFormatting(label: "Toggle Underline") { $0.underline.toggle() }
     }
 
     func setFontSize(_ size: Double) {
         let clamped = min(max(size, 11), 72)
-        let cell = activeSheet.cell(at: activeCell) ?? {
-            let c = Cell()
-            activeSheet.cells[activeCell] = c
-            return c
-        }()
-        cell.formatting.fontSize = clamped
-        markDirty()
-        bump()
+        updateFormatting(label: "Set Font Size") { $0.fontSize = clamped }
     }
 
     func setAlignment(_ alignment: GridForgeCore.HorizontalAlignment) {
-        let cell = activeSheet.cell(at: activeCell) ?? {
-            let c = Cell()
-            activeSheet.cells[activeCell] = c
-            return c
-        }()
-        cell.formatting.alignment = alignment
-        markDirty()
-        bump()
+        updateFormatting(label: "Set Alignment") { $0.alignment = alignment }
     }
 
     // MARK: - Column width
 
     func setColumnWidth(_ column: Int, _ width: Double) {
-        activeSheet.setColumnWidth(width, for: column)
-        markDirty()
+        let oldWidth = activeSheet.columnWidth(for: column)
+        guard abs(oldWidth - width) > 0.25 else { return }
+        perform(ResizeColumnCommand(
+            sheetIndex: workbook.activeSheetIndex,
+            columnIndex: column,
+            oldWidth: oldWidth,
+            newWidth: width
+        ))
         bump()
     }
 
@@ -517,6 +481,7 @@ final class WorkbookViewModel: ObservableObject {
         isEditing = false
         editingText = ""
         undoManager.clear()
+        undoManager.markClean()
         formulaEngine.dependencyGraph.clear()
         isDirty = false
         currentFileURL = nil
@@ -533,6 +498,7 @@ final class WorkbookViewModel: ObservableObject {
             isEditing = false
             editingText = ""
             undoManager.clear()
+            undoManager.markClean()
             formulaEngine.recalculate(worksheet: activeSheet)
             syncEditingTextFromActiveCell()
             isDirty = false
@@ -551,6 +517,7 @@ final class WorkbookViewModel: ObservableObject {
         bump()
         do {
             try XLSXWriter.write(workbook, to: url)
+            undoManager.markClean()
             isDirty = false
             currentFileURL = url
             isLoading = false
@@ -707,12 +674,85 @@ final class WorkbookViewModel: ObservableObject {
         editingText = cell?.editString ?? ""
     }
 
+    private func autoCompleteFormulaIfPossible(_ input: String) -> String {
+        guard input.hasPrefix("="),
+              unmatchedOpeningParentheses(in: input) == 1 else {
+            return input
+        }
+
+        let candidate = input + ")"
+        guard formulaParses(candidate) else { return input }
+        return candidate
+    }
+
+    private func unmatchedOpeningParentheses(in text: String) -> Int? {
+        var balance = 0
+        var inString = false
+
+        for character in text {
+            if character == "\"" {
+                inString.toggle()
+                continue
+            }
+            guard !inString else { continue }
+
+            if character == "(" {
+                balance += 1
+            } else if character == ")" {
+                balance -= 1
+                if balance < 0 { return nil }
+            }
+        }
+
+        return inString ? nil : balance
+    }
+
+    private func formulaParses(_ input: String) -> Bool {
+        let formula = String(input.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !formula.isEmpty else { return false }
+
+        do {
+            let tokens = try Tokenizer(formula: formula).tokenize()
+            _ = try FormulaParser(tokens: tokens).parse()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func perform(_ command: SpreadsheetCommand) {
+        undoManager.perform(command, on: workbook)
+        syncDirtyState()
+    }
+
+    private func updateFormatting(label: String, mutate: (inout CellFormatting) -> Void) {
+        let range = selectedRange
+        var newFormatting: [CellAddress: CellFormatting] = [:]
+        for address in range.allAddresses {
+            var formatting = activeSheet.cell(at: address)?.formatting ?? CellFormatting()
+            mutate(&formatting)
+            newFormatting[address] = formatting
+        }
+
+        perform(FormatRangeCommand(
+            sheetIndex: workbook.activeSheetIndex,
+            range: range,
+            newFormatting: newFormatting,
+            label: label
+        ))
+        bump()
+    }
+
     private func bump() {
         version += 1
     }
 
+    private func syncDirtyState() {
+        isDirty = undoManager.isDirty
+    }
+
     private func markDirty() {
-        isDirty = true
+        syncDirtyState()
     }
 
     private func setError(_ message: String) {

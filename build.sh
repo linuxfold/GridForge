@@ -7,15 +7,51 @@ BUILD_DIR="$PROJECT_DIR/.build"
 APP_BUNDLE="$PROJECT_DIR/$APP_NAME.app"
 DMG_PATH="$PROJECT_DIR/$APP_NAME.dmg"
 ICON_PATH="$PROJECT_DIR/Assets/GridForge.icns"
+MODULE_CACHE_DIR="$BUILD_DIR/module-cache"
 
 # Code signing / notarization
-DEVELOPER_ID="Developer ID Application: Simon-Pierre Boucher (3YM54G49SN)"
+DEVELOPER_ID="${GRIDFORGE_DEVELOPER_ID:-Developer ID Application: Simon-Pierre Boucher (3YM54G49SN)}"
 TEAM_ID="3YM54G49SN"
 APPLE_ID="spbou4@icloud.com"
 BUNDLE_ID="com.gridforge.app"
+XLSX_UTI="org.openxmlformats.spreadsheetml.sheet"
+
+sign_identity_available() {
+    security find-identity -v -p codesigning 2>/dev/null | grep -F "$DEVELOPER_ID" >/dev/null
+}
+
+sign_app() {
+    if sign_identity_available; then
+        echo "    Signing with Developer ID: $DEVELOPER_ID"
+        codesign --deep --force --options runtime \
+            --sign "$DEVELOPER_ID" \
+            --timestamp \
+            --identifier "$BUNDLE_ID" \
+            "$APP_BUNDLE" 2>&1
+    else
+        echo "    Developer ID identity not found. Using ad-hoc signing for local testing."
+        codesign --deep --force \
+            --sign - \
+            --identifier "$BUNDLE_ID" \
+            "$APP_BUNDLE" 2>&1
+    fi
+}
+
+sign_dmg() {
+    if sign_identity_available; then
+        echo "[Step 4] Signing DMG..."
+        codesign --force --sign "$DEVELOPER_ID" --timestamp "$DMG_PATH" 2>&1
+        echo "    DMG signed."
+    else
+        echo "[Step 4] Skipping DMG signing. Developer ID identity not found."
+    fi
+}
 
 echo "=== GridForge Build System ==="
 echo ""
+
+mkdir -p "$MODULE_CACHE_DIR"
+export CLANG_MODULE_CACHE_PATH="$MODULE_CACHE_DIR"
 
 case "${1:-build}" in
     build)
@@ -83,8 +119,37 @@ case "${1:-build}" in
             </array>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.openxmlformats.spreadsheetml.sheet</string>
+            </array>
             <key>LSHandlerRank</key>
             <string>Alternate</string>
+        </dict>
+    </array>
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.openxmlformats.spreadsheetml.sheet</string>
+            <key>UTTypeDescription</key>
+            <string>Excel Workbook</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>com.pkware.zip-archive</string>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>xlsx</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</string>
+                </array>
+            </dict>
         </dict>
     </array>
 </dict>
@@ -102,11 +167,7 @@ PLIST
 
     sign)
         echo "Signing $APP_NAME.app..."
-        codesign --deep --force --options runtime \
-            --sign "$DEVELOPER_ID" \
-            --timestamp \
-            --identifier "$BUNDLE_ID" \
-            "$APP_BUNDLE" 2>&1
+        sign_app
 
         echo "Verifying signature..."
         codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE" 2>&1
@@ -129,11 +190,7 @@ PLIST
 
         # Step 2: Sign the app
         echo "[Step 2] Code signing..."
-        codesign --deep --force --options runtime \
-            --sign "$DEVELOPER_ID" \
-            --timestamp \
-            --identifier "$BUNDLE_ID" \
-            "$APP_BUNDLE" 2>&1
+        sign_app
         echo "    Signature verified:"
         codesign --verify --deep --strict "$APP_BUNDLE" 2>&1 && echo "    OK"
 
@@ -157,16 +214,14 @@ PLIST
         rm -rf "$DMG_STAGING"
         echo "    DMG created: $DMG_PATH"
 
-        # Step 4: Sign the DMG
-        echo "[Step 4] Signing DMG..."
-        codesign --force --sign "$DEVELOPER_ID" --timestamp "$DMG_PATH" 2>&1
-        echo "    DMG signed."
+        # Step 4: Sign the DMG if a Developer ID certificate is installed.
+        sign_dmg
 
         echo ""
         echo "=== DMG ready ==="
         echo "DMG: $DMG_PATH"
         echo ""
-        echo "To notarize:  $0 notarize"
+        echo "To notarize a Developer-ID-signed DMG:  $0 notarize"
         ;;
 
     notarize)
@@ -187,7 +242,7 @@ PLIST
         xcrun notarytool submit "$DMG_PATH" \
             --apple-id "$APPLE_ID" \
             --team-id "$TEAM_ID" \
-            --password "kmnu-cmfc-txwl-deuy" \
+            --password "${GRIDFORGE_NOTARY_PASSWORD:?Set GRIDFORGE_NOTARY_PASSWORD to your app-specific password.}" \
             --wait 2>&1
 
         # Step 2: Staple the notarization ticket

@@ -6,6 +6,13 @@ import Foundation
 /// without depending directly on Worksheet.
 public protocol CellValueProvider {
     func cellValue(at address: CellAddress) -> CellValue
+    func cellValue(for reference: CellReference) -> CellValue
+}
+
+public extension CellValueProvider {
+    func cellValue(for reference: CellReference) -> CellValue {
+        cellValue(at: reference.address)
+    }
 }
 
 // MARK: - Formula Evaluator
@@ -30,8 +37,8 @@ public final class FormulaEvaluator {
         case .error(let e):
             return .error(e)
 
-        case .cellReference(let address):
-            return provider.cellValue(at: address)
+        case .cellReference(let reference):
+            return provider.cellValue(for: reference)
 
         case .range:
             // A bare range outside a function is not valid as a scalar value.
@@ -244,9 +251,9 @@ public final class FormulaEvaluator {
         for arg in args {
             switch arg {
             case .range(let start, let end):
-                let range = CellRange(start: start, end: end)
-                for addr in range.allAddresses {
-                    result.append(provider.cellValue(at: addr))
+                let range = CellRangeReference(start: start, end: end)
+                for reference in range.allReferences {
+                    result.append(provider.cellValue(for: reference))
                 }
             default:
                 result.append(evaluate(node: arg, provider: provider))
@@ -615,23 +622,24 @@ public final class FormulaEvaluator {
     /// Expand a range argument into a 2D grid of cell values (rows x columns).
     private func expandRangeToGrid(_ node: ASTNode, provider: CellValueProvider) -> (values: [[CellValue]], rowCount: Int, colCount: Int)? {
         guard case .range(let start, let end) = node else { return nil }
-        let range = CellRange(start: start, end: end)
+        let range = CellRangeReference(start: start, end: end)
+        let addressRange = range.addressRange
         var grid: [[CellValue]] = []
-        for r in range.start.row...range.end.row {
+        for r in addressRange.start.row...addressRange.end.row {
             var row: [CellValue] = []
-            for c in range.start.column...range.end.column {
-                row.append(provider.cellValue(at: CellAddress(column: c, row: r)))
+            for c in addressRange.start.column...addressRange.end.column {
+                row.append(provider.cellValue(for: CellReference(sheetID: start.sheetID, column: c, row: r)))
             }
             grid.append(row)
         }
-        return (grid, range.rowCount, range.columnCount)
+        return (grid, addressRange.rowCount, addressRange.columnCount)
     }
 
     /// Expand a range into a flat list of cell values (row-major order).
     private func expandRangeToList(_ node: ASTNode, provider: CellValueProvider) -> [CellValue]? {
         guard case .range(let start, let end) = node else { return nil }
-        let range = CellRange(start: start, end: end)
-        return range.allAddresses.map { provider.cellValue(at: $0) }
+        let range = CellRangeReference(start: start, end: end)
+        return range.allReferences.map { provider.cellValue(for: $0) }
     }
 
     /// Check whether a CellValue matches a criteria string.
@@ -885,27 +893,27 @@ public final class FormulaEvaluator {
         if case .error = criteriaVal { return criteriaVal }
         let criteria = coerceToString(criteriaVal)
 
-        let criteriaRange = CellRange(start: rangeStart, end: rangeEnd)
-        let criteriaAddresses = criteriaRange.allAddresses
+        let criteriaRange = CellRangeReference(start: rangeStart, end: rangeEnd)
+        let criteriaReferences = criteriaRange.allReferences
 
         // Determine sum range
-        let sumAddresses: [CellAddress]
+        let sumReferences: [CellReference]
         if args.count == 3 {
             guard case .range(let sumStart, let sumEnd) = args[2] else {
                 return .error(.value)
             }
-            let sumRange = CellRange(start: sumStart, end: sumEnd)
-            sumAddresses = sumRange.allAddresses
+            let sumRange = CellRangeReference(start: sumStart, end: sumEnd)
+            sumReferences = sumRange.allReferences
         } else {
-            sumAddresses = criteriaAddresses
+            sumReferences = criteriaReferences
         }
 
         var total = 0.0
-        for (i, addr) in criteriaAddresses.enumerated() {
-            let cellVal = provider.cellValue(at: addr)
+        for (i, reference) in criteriaReferences.enumerated() {
+            let cellVal = provider.cellValue(for: reference)
             if matchesCriteria(cellVal, criteria: criteria) {
-                if i < sumAddresses.count {
-                    let sumVal = provider.cellValue(at: sumAddresses[i])
+                if i < sumReferences.count {
+                    let sumVal = provider.cellValue(for: sumReferences[i])
                     if let n = sumVal.numericValue {
                         total += n
                     }
@@ -926,10 +934,10 @@ public final class FormulaEvaluator {
         if case .error = criteriaVal { return criteriaVal }
         let criteria = coerceToString(criteriaVal)
 
-        let range = CellRange(start: rangeStart, end: rangeEnd)
+        let range = CellRangeReference(start: rangeStart, end: rangeEnd)
         var count = 0
-        for addr in range.allAddresses {
-            let cellVal = provider.cellValue(at: addr)
+        for reference in range.allReferences {
+            let cellVal = provider.cellValue(for: reference)
             if matchesCriteria(cellVal, criteria: criteria) {
                 count += 1
             }

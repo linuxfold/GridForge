@@ -13,6 +13,24 @@ struct FormulaBarView: View {
         viewModel.activeSheet.cell(at: viewModel.activeCell)
     }
 
+    private var formulaTextBinding: Binding<String> {
+        Binding(
+            get: {
+                if viewModel.isEditing {
+                    return viewModel.editingText
+                }
+                return currentCell?.editString ?? ""
+            },
+            set: { newValue in
+                if !viewModel.isEditing {
+                    viewModel.startEditing(withText: newValue)
+                } else {
+                    viewModel.editingText = newValue
+                }
+            }
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -114,35 +132,8 @@ struct FormulaBarView: View {
 
     @ViewBuilder
     private var formulaInput: some View {
-        let displayText: String = {
-            if viewModel.isEditing {
-                return viewModel.editingText
-            }
-            return currentCell?.editString ?? ""
-        }()
-
-        TextField("", text: Binding(
-            get: { displayText },
-            set: { newValue in
-                if !viewModel.isEditing {
-                    viewModel.startEditing(withText: newValue)
-                } else {
-                    viewModel.editingText = newValue
-                }
-            }
-        ))
-        .textFieldStyle(.plain)
-        .font(GridForgeTypography.formulaBarFont)
-        .onSubmit {
-            if viewModel.isEditing {
-                viewModel.commitEdit()
-            }
-        }
-        .onExitCommand {
-            if viewModel.isEditing {
-                viewModel.cancelEdit()
-            }
-        }
+        FormulaEditorField(text: formulaTextBinding, viewModel: viewModel)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Helpers
@@ -152,6 +143,95 @@ struct FormulaBarView: View {
         let trimmed = nameBoxText.trimmingCharacters(in: .whitespaces)
         if let addr = CellAddress.parse(trimmed) {
             viewModel.selectCell(addr)
+        }
+    }
+}
+
+private struct FormulaEditorField: NSViewRepresentable {
+    @Binding var text: String
+    @ObservedObject var viewModel: WorkbookViewModel
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = NSTextField(frame: .zero)
+        textField.delegate = context.coordinator
+        textField.isBordered = false
+        textField.isBezeled = false
+        textField.drawsBackground = false
+        textField.focusRingType = .none
+        textField.font = GridForgeNSFonts.formulaBarFont
+        textField.lineBreakMode = .byClipping
+        textField.cell?.wraps = false
+        textField.cell?.isScrollable = true
+        textField.isEditable = true
+        textField.isSelectable = true
+        textField.stringValue = text
+        return textField
+    }
+
+    func updateNSView(_ textField: NSTextField, context: Context) {
+        context.coordinator.parent = self
+
+        if let editor = textField.currentEditor() as? NSTextView {
+            guard editor.string != text, !context.coordinator.isUpdatingFromField else { return }
+            let selectedRange = editor.selectedRange()
+            editor.string = text
+            editor.setSelectedRange(NSRange(location: min(selectedRange.location, (text as NSString).length), length: 0))
+        } else if textField.stringValue != text {
+            textField.stringValue = text
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: FormulaEditorField
+        var isUpdatingFromField = false
+
+        init(parent: FormulaEditorField) {
+            self.parent = parent
+        }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            parent.viewModel.formulaBarHasFocus = true
+            if !parent.viewModel.isEditing {
+                parent.viewModel.startEditing(withText: parent.text)
+            }
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            let value = fieldEditorText(from: obj) ?? (obj.object as? NSTextField)?.stringValue ?? parent.text
+            isUpdatingFromField = true
+            parent.text = value
+            parent.viewModel.editingText = value
+            isUpdatingFromField = false
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            parent.viewModel.formulaBarHasFocus = false
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            if selector == #selector(NSResponder.insertNewline(_:)) {
+                parent.text = textView.string
+                parent.viewModel.editingText = textView.string
+                parent.viewModel.commitEdit()
+                parent.viewModel.formulaBarHasFocus = false
+                NotificationCenter.default.post(name: .gridForgeFocusGrid, object: nil)
+                return true
+            }
+            if selector == #selector(NSResponder.cancelOperation(_:)) {
+                parent.viewModel.cancelEdit()
+                parent.viewModel.formulaBarHasFocus = false
+                NotificationCenter.default.post(name: .gridForgeFocusGrid, object: nil)
+                return true
+            }
+            return false
+        }
+
+        private func fieldEditorText(from notification: Notification) -> String? {
+            (notification.userInfo?["NSFieldEditor"] as? NSTextView)?.string
         }
     }
 }

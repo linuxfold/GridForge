@@ -29,8 +29,8 @@ public indirect enum ASTNode: Equatable, Sendable {
     case number(Double)
     case string(String)
     case boolean(Bool)
-    case cellReference(CellAddress)
-    case range(CellAddress, CellAddress)
+    case cellReference(CellReference)
+    case range(CellReference, CellReference)
     case binaryOp(BinaryOperator, ASTNode, ASTNode)
     case unaryOp(UnaryOperator, ASTNode)
     case functionCall(String, [ASTNode])
@@ -183,7 +183,7 @@ public final class FormulaParser {
 
         case .cellReference(let ref):
             advance()
-            guard let address = parseCellReferenceString(ref) else {
+            guard let reference = parseCellReferenceString(ref) else {
                 return .error(.ref)
             }
             // Check for range operator ':'
@@ -196,9 +196,9 @@ public final class FormulaParser {
                 guard let endAddress = parseCellReferenceString(endRef) else {
                     return .error(.ref)
                 }
-                return .range(address, endAddress)
+                return .range(reference, endAddress)
             }
-            return .cellReference(address)
+            return .cellReference(reference)
 
         case .functionName(let name):
             advance()
@@ -255,11 +255,9 @@ public final class FormulaParser {
         return token
     }
 
-    /// Parse a cell reference string (possibly with $ anchors) into a CellAddress.
-    /// Strips '$' characters before parsing.
-    private func parseCellReferenceString(_ ref: String) -> CellAddress? {
-        let stripped = ref.replacingOccurrences(of: "$", with: "")
-        return CellAddress.parse(stripped)
+    /// Parse a cell reference string into the richer formula reference model.
+    private func parseCellReferenceString(_ ref: String) -> CellReference? {
+        CellReference.parse(ref)
     }
 }
 

@@ -27,6 +27,17 @@ public final class Worksheet: Identifiable {
         self.rowHeights = [:]
     }
 
+    /// Deep copy used by workbook commands and import/export preservation.
+    public func copy(name: String? = nil, id: UUID? = nil) -> Worksheet {
+        let copy = Worksheet(name: name ?? self.name, id: id ?? self.id)
+        for (address, cell) in cells {
+            copy.cells[address] = cell.copy()
+        }
+        copy.columnWidths = columnWidths
+        copy.rowHeights = rowHeights
+        return copy
+    }
+
     // MARK: - Cell Access
 
     public func cell(at address: CellAddress) -> Cell? {

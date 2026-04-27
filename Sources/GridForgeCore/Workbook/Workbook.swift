@@ -6,12 +6,18 @@ public final class Workbook: Identifiable {
     public var sheets: [Worksheet]
     public var activeSheetIndex: Int
     public var metadata: WorkbookMetadata
+    public var sourceXLSXPackage: XLSXPackage?
 
-    public init(sheets: [Worksheet]? = nil, metadata: WorkbookMetadata = WorkbookMetadata()) {
+    public init(
+        sheets: [Worksheet]? = nil,
+        metadata: WorkbookMetadata = WorkbookMetadata(),
+        sourceXLSXPackage: XLSXPackage? = nil
+    ) {
         self.id = UUID()
         self.sheets = sheets ?? [Worksheet(name: "Sheet1")]
         self.activeSheetIndex = 0
         self.metadata = metadata
+        self.sourceXLSXPackage = sourceXLSXPackage
     }
 
     public var activeSheet: Worksheet {

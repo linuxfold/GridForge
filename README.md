@@ -95,6 +95,12 @@ This is not a demo or prototype. GridForge is a **production-grade spreadsheet f
 - **Command-pattern undo/redo** with batch operations
 - Apple **Developer ID signed and notarized** for Gatekeeper-clean distribution
 
+### XLSX Compatibility Promise
+
+GridForge's XLSX promise is: **Open existing Excel files safely and preserve unsupported workbook content.**
+
+The XLSX layer now carries the original package parts through the workbook model and overlays GridForge-owned workbook, worksheet, and shared-string parts on save. This is a preservation baseline, not a claim that every OpenXML feature is editable yet.
+
 ---
 
 ## Download
